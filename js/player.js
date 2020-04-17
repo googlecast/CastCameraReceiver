@@ -43,6 +43,34 @@ const analytics_ = new CastAnalytics();
 analytics_.start();
 
 /**
+ * Debug Logger Object
+ * setEnabled: Enable debug logger and show a 'DEBUG MODE' overlay at top left corner.
+ * showDebugLogs: Displays the logs through an overlay on the receiver.
+ * Uncomment setEnabled() and showDebugLogs() to enable this functionality.
+ * Make sure to change setEnabled to false when deploying to production.
+ */
+const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
+// castDebugLogger.setEnabled(true);
+// castDebugLogger.showDebugLogs(true);
+
+// enables logging for described events at the configured logging level
+castDebugLogger.loggerLevelByEvents = {
+  'cast.framework.events.EventType.PLAYER_LOADING': cast.framework.LoggerLevel.INFO,
+  'cast.framework.events.EventType.MEDIA_STATUS': cast.framework.LoggerLevel.DEBUG
+}
+
+const LOG_RECEIVER = 'MyReceiverApp';
+const LOG_BACKEND = 'Backend';
+const LOG_AUTH = 'Authentication';
+
+// associates each log tag with allowed logging level
+castDebugLogger.loggerLevelByTags = {
+  [LOG_RECEIVER]: cast.framework.LoggerLevel.INFO, //LOG_RECEIVER logs INFO WARN and ERROR
+  [LOG_BACKEND]: cast.framework.LoggerLevel.WARNING, // LOG_BACKEND logs WARN and ERROR
+  [LOG_AUTH]: cast.framework.LoggerLevel.ERROR // LOG_AUTH logs ERROR
+}
+
+/**
  * Configuration to customize playback behavior.
  * https://developers.google.com/cast/docs/reference/caf_receiver/cast.framework.PlaybackConfig
  */
@@ -68,6 +96,7 @@ castContext_.start({
  */
 function fetchAssetAndAuth(requestUrl, credential, request) {
   return new Promise(function(resolve, reject) {
+    castDebugLogger.info(LOG_BACKEND, 'Fetching Asset and Authentication');
 
     // check credential
     fetch('res/camera_info.json')
@@ -77,12 +106,17 @@ function fetchAssetAndAuth(requestUrl, credential, request) {
           reject('invalid users');
         }
 
+        castDebugLogger.info(LOG_AUTH, 'Authentication passed for credential: '
+          + credential);
+
         // fetch stream URL
         let streamUrl = '';
         if (asset.streamUrl) {
           streamUrl = asset.streamUrl;
+          castDebugLogger.info(LOG_BACKEND, 'streamUrl provided through backend');
         } else {
           streamUrl = request.media.entity;
+          castDebugLogger.info(LOG_BACKEND, 'streamUrl provided through request');
         }
 
         // set playable stream URL and content Type
@@ -94,8 +128,9 @@ function fetchAssetAndAuth(requestUrl, credential, request) {
         } else if (streamUrl.endsWith('mp4')) {
             request.media.contentType = 'video/mp4';
         } else {
-            console.log('Unknown contentType for ' + streamUrl);
+            castDebugLogger.warn(LOG_BACKEND, 'Unknown contentType for ' + streamUrl);
         }
+
 
         // Set metadata title for both in Google Home App and CAF Receiver UI.
         // https://developers.google.com/cast/docs/reference/caf_receiver/cast.framework.messages.GenericMediaMetadata
@@ -104,6 +139,13 @@ function fetchAssetAndAuth(requestUrl, credential, request) {
         metadata.title = asset.cameraId;
         metadata.subtitle = asset.cameraInfo;
         request.media.metadata = metadata;
+
+        // Log the modified request for debugging purposes
+        castDebugLogger.debug(LOG_BACKEND, 'new request values:'
+          + '\nmetadata.title: ' + metadata.title
+          + '\nmetadata.subtitle: ' + metadata.subtitle
+          + '\nmedia.contentUrl: ' + request.media.contentUrl
+          + '\nmedia.contentType: ' + request.media.contentType);
 
         resolve(request);
       });
@@ -116,18 +158,25 @@ function fetchAssetAndAuth(requestUrl, credential, request) {
 playerManager_.setMessageInterceptor(
   cast.framework.messages.MessageType.LOAD,
   loadRequestData => {
+    castDebugLogger.info(LOG_RECEIVER, 'Intercepted ' + loadRequestData.type
+      + ' request with requestId ' + loadRequestData.requestId);
+
     // Requests from web-senders.
     if (!loadRequestData.media || !loadRequestData.media.entity) {
+        castDebugLogger.info(LOG_RECEIVER, 'Request sent from web sender, media.entity missing');
         return loadRequestData;
     }
 
-    // Requests from Google Assistant.
+    // Requests from Google Assistant
     return fetchAssetAndAuth(loadRequestData.media.entity,
       loadRequestData.credentials, loadRequestData)
       .then((modifiedRequest) => {
         return modifiedRequest;
       })
       .catch (() => { // invalid users
+        castDebugLogger.error(LOG_AUTH, 'Authentication failed for credentials: '
+          + loadRequestData.credentials);
+
         const err = new cast.framework.messages.ErrorData(
                   cast.framework.messages.ErrorType.LOAD_FAILED);
         err.reason = cast.framework.messages.ErrorReason.AUTHENTICATION_EXPIRED;
