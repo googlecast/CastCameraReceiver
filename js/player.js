@@ -46,12 +46,18 @@ analytics_.start();
  * Debug Logger Object
  * setEnabled: Enable debug logger and show a 'DEBUG MODE' overlay at top left corner.
  * showDebugLogs: Displays the logs through an overlay on the receiver.
- * Uncomment setEnabled() and showDebugLogs() to enable this functionality.
  * Make sure to change setEnabled to false when deploying to production.
  */
 const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
-// castDebugLogger.setEnabled(true);
-// castDebugLogger.showDebugLogs(true);
+  /**
+   * Uncommnet the following code to enable its functionality
+   */
+//  context.addEventListener(cast.framework.system.EventType.READY, () => {
+//   if (!castDebugLogger.debugOverlayElement_) {
+//       castDebugLogger.setEnabled(true);
+//       castDebugLogger.showDebugLogs(true);
+//   }
+// });
 
 // enables logging for described events at the configured logging level
 castDebugLogger.loggerLevelByEvents = {
